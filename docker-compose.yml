@@ -1,0 +1,39 @@
+services:
+  web-burp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web-burp
+    ports:
+      - "5001:5000"  # Flask UI
+      - "8080:8080"  # Proxy port (for future use)
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # Add custom DNS entries (maps hostnames to IPs like /etc/hosts)
+    # Uncomment and add your entries:
+    extra_hosts:
+      - "redemption:192.168.86.26"
+    #   - "myapp.local:192.168.1.100"
+    #   - "api.dev:10.0.0.50"
+    volumes:
+      # Mount app code for development (comment out for production)
+      - ./app.py:/app/app.py
+      - ./proxy.py:/app/proxy.py
+      - ./storage.py:/app/storage.py
+      - ./capture_addon.py:/app/capture_addon.py
+      - ./templates:/app/templates
+      - ./static:/app/static
+      # Persist certificates and data
+      - ./certs:/app/certs
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - burp-network
+
+networks:
+  burp-network:
+    driver: bridge

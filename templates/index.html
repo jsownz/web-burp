@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web-Burp - Intercepting Proxy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav class="tabs">
+            <button class="tab active" data-tab="dashboard">Dashboard</button>
+            <button class="tab" data-tab="proxy">Proxy</button>
+            <button class="tab" data-tab="history">History</button>
+            <button class="tab" data-tab="intercept">Intercept</button>
+            <button class="tab" data-tab="repeater">Repeater</button>
+        </nav>
+
+        <main>
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="card">
+                    <h2>Welcome to Web-Burp</h2>
+                    <p>Your browser-based intercepting proxy for pentesting and security research.</p>
+                    
+                    <div class="status-grid">
+                        <div class="status-card">
+                            <h3>Proxy Status</h3>
+                            <p class="status-indicator offline" id="proxy-status">Offline</p>
+                            <small>Port 8080</small>
+                        </div>
+                        <div class="status-card">
+                            <h3>Requests Captured</h3>
+                            <p class="stat-number" id="request-count">0</p>
+                            <small>This session</small>
+                        </div>
+                        <div class="status-card">
+                            <h3>Intercept</h3>
+                            <p class="status-indicator offline">Off</p>
+                            <small>Coming soon</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Quick Start</h3>
+                    <ol class="quick-start-list">
+                        <li>Configure your browser to use <code>localhost:8080</code> as HTTP proxy</li>
+                        <li>Install the CA certificate for HTTPS interception (coming soon)</li>
+                        <li>Navigate to the Proxy tab to start capturing traffic</li>
+                        <li>Use Intercept mode to modify requests/responses on-the-fly</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Proxy Tab -->
+            <div id="proxy" class="tab-content">
+                <div class="card">
+                    <h2>Proxy Configuration</h2>
+                    <p>Control the HTTP/HTTPS intercepting proxy server.</p>
+                    
+                    <div class="proxy-controls">
+                        <div class="control-group">
+                            <button id="start-proxy-btn" class="btn btn-success">Start Proxy</button>
+                            <button id="stop-proxy-btn" class="btn btn-danger" disabled>Stop Proxy</button>
+                        </div>
+                        
+                        <div class="proxy-info">
+                            <h3>Proxy Settings</h3>
+                            <div class="info-row">
+                                <span class="label">Listen Address:</span>
+                                <code>0.0.0.0:8080</code>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Status:</span>
+                                <span id="proxy-status-text" class="status-text offline">Offline</span>
+                            </div>
+                        </div>
+                        
+                        <div class="proxy-certificate">
+                            <h3>🔒 HTTPS Certificate Setup</h3>
+                            <p>To intercept HTTPS traffic, install the mitmproxy CA certificate in your browser:</p>
+                            
+                            <div class="cert-status" id="cert-status">
+                                <p>Loading certificate status...</p>
+                            </div>
+                            
+                            <div id="cert-download" style="display: none;">
+                                <button id="download-cert-btn" class="btn btn-success">Download CA Certificate</button>
+                                
+                                <details class="install-instructions">
+                                    <summary>Installation Instructions</summary>
+                                    
+                                    <div class="browser-instructions">
+                                        <h4>Chrome / Chromium / Edge</h4>
+                                        <ol>
+                                            <li>Download the certificate above</li>
+                                            <li>Settings → Privacy and security → Security → Manage certificates</li>
+                                            <li>Go to "Authorities" tab</li>
+                                            <li>Click "Import" and select the downloaded .pem file</li>
+                                            <li>Check "Trust this certificate for identifying websites"</li>
+                                            <li>Click OK</li>
+                                        </ol>
+                                        
+                                        <h4>Firefox</h4>
+                                        <ol>
+                                            <li>Download the certificate above</li>
+                                            <li>Settings → Privacy & Security → Certificates → View Certificates</li>
+                                            <li>Go to "Authorities" tab</li>
+                                            <li>Click "Import" and select the downloaded .pem file</li>
+                                            <li>Check "Trust this CA to identify websites"</li>
+                                            <li>Click OK</li>
+                                        </ol>
+                                        
+                                        <h4>Safari (macOS)</h4>
+                                        <ol>
+                                            <li>Download the certificate above</li>
+                                            <li>Double-click the .pem file to open Keychain Access</li>
+                                            <li>Find "mitmproxy" in the list and double-click it</li>
+                                            <li>Expand "Trust" section</li>
+                                            <li>Set "When using this certificate" to "Always Trust"</li>
+                                            <li>Close the window and enter your password</li>
+                                        </ol>
+                                        
+                                        <h4>curl (Command Line)</h4>
+                                        <pre><code>curl --cacert ./mitmproxy-ca-cert.pem -x localhost:8080 https://httpbin.org/get</code></pre>
+                                    </div>
+                                </details>
+                            </div>
+                            
+                            <div class="info-note">
+                                <strong>⚠️ Security Note:</strong> The CA certificate allows full HTTPS interception. 
+                                Only install it in browsers used for testing. Remove it when done.
+                            </div>
+                        </div>
+                        
+                        <div class="proxy-instructions">
+                            <h3>Browser Configuration</h3>
+                            <ol>
+                                <li>Install the CA certificate above (required for HTTPS)</li>
+                                <li>Open your browser's network settings</li>
+                                <li>Configure HTTP proxy: <code>localhost:8080</code></li>
+                                <li>Configure HTTPS proxy: <code>localhost:8080</code></li>
+                                <li>Start browsing - traffic will be captured automatically</li>
+                            </ol>
+                            
+                            <div class="info-note">
+                                <strong>💡 Tip:</strong> Requests to <code>localhost</code> are automatically excluded 
+                                to prevent capturing the web-burp interface's own traffic.
+                            </div>
+                        </div>
+                        
+                        <div class="proxy-exclusions">
+                            <h3>Excluded Hosts</h3>
+                            <p class="exclusion-desc">These domains won't be captured by the proxy:</p>
+                            <ul id="exclusion-list" class="exclusion-list">
+                                <li>Loading...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div id="history" class="tab-content">
+                <div class="card">
+                    <div class="history-header">
+                        <h2>Request History</h2>
+                        <button id="clear-history-btn" class="btn btn-small">Clear History</button>
+                    </div>
+                    
+                    <div id="request-list" class="request-list">
+                        <p class="empty-state">No requests captured yet. Start the proxy and configure your browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Intercept Tab (placeholder) -->
+            <div id="intercept" class="tab-content">
+                <div class="card">
+                    <h2>Intercept Requests</h2>
+                    <p>Intercept and modify requests in real-time.</p>
+                </div>
+            </div>
+
+            <!-- Repeater Tab (placeholder) -->
+            <div id="repeater" class="tab-content">
+                <div class="card">
+                    <h2>Request Repeater</h2>
+                    <p>Manually craft and send HTTP requests.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Web-Burp v0.1.0 | For authorized testing only</p>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize WebSocket connection
+        const socket = io();
+        
+        // Connection status
+        socket.on('connect', () => {
+            console.log('WebSocket connected');
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('WebSocket disconnected');
+        });
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                
+                // Update active tab button
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update active content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.getElementById(tabName).classList.add('active');
+                
+                // Request history when switching to history tab
+                if (tabName === 'history') {
+                    socket.emit('request_history', { limit: 50 });
+                }
+            });
+        });
+        
+        // Proxy control functions
+        const startBtn = document.getElementById('start-proxy-btn');
+        const stopBtn = document.getElementById('stop-proxy-btn');
+        const clearBtn = document.getElementById('clear-history-btn');
+        
+        startBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/proxy/start', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    updateProxyStatus();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Failed to start proxy: ' + error);
+            }
+        });
+        
+        stopBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/proxy/stop', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    updateProxyStatus();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Failed to stop proxy: ' + error);
+            }
+        });
+        
+        clearBtn.addEventListener('click', async () => {
+            if (confirm('Clear all captured requests?')) {
+                try {
+                    await fetch('/api/requests/clear', { method: 'POST' });
+                } catch (error) {
+                    alert('Failed to clear history: ' + error);
+                }
+            }
+        });
+        
+        // WebSocket event handlers
+        socket.on('proxy_status', (data) => {
+            console.log('Proxy status update:', data);
+            const running = data.running;
+            const statusElements = document.querySelectorAll('#proxy-status, #proxy-status-text');
+            statusElements.forEach(el => {
+                el.textContent = running ? 'Online' : 'Offline';
+                el.classList.toggle('online', running);
+                el.classList.toggle('offline', !running);
+            });
+            
+            // Update buttons
+            startBtn.disabled = running;
+            stopBtn.disabled = !running;
+            
+            // Load exclusions when status updates
+            loadExclusions();
+        });
+        
+        socket.on('stats_update', (data) => {
+            console.log('Stats update:', data);
+            document.getElementById('request-count').textContent = data.total || 0;
+        });
+        
+        socket.on('new_request', (data) => {
+            console.log('New request captured:', data);
+            // If on history tab, refresh the list
+            if (document.getElementById('history').classList.contains('active')) {
+                socket.emit('request_history', { limit: 50 });
+            }
+        });
+        
+        socket.on('requests_cleared', () => {
+            console.log('Requests cleared');
+            const requestList = document.getElementById('request-list');
+            requestList.innerHTML = '<p class="empty-state">No requests captured yet. Start the proxy and configure your browser.</p>';
+        });
+        
+        socket.on('history_update', (data) => {
+            console.log('History update:', data);
+            const requestList = document.getElementById('request-list');
+            
+            if (data.requests.length === 0) {
+                requestList.innerHTML = '<p class="empty-state">No requests captured yet. Start the proxy and configure your browser.</p>';
+                return;
+            }
+            
+            requestList.innerHTML = data.requests.map(req => `
+                <div class="request-item">
+                    <div class="request-method ${req.method.toLowerCase()}">${req.method}</div>
+                    <div class="request-details">
+                        <div class="request-url">${escapeHtml(req.url)}</div>
+                        <div class="request-meta">
+                            <span class="request-time">${new Date(req.timestamp).toLocaleTimeString()}</span>
+                            <span class="request-host">${escapeHtml(req.host)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        });
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Load exclusion list
+        async function loadExclusions() {
+            try {
+                const response = await fetch('/api/proxy/exclusions');
+                const data = await response.json();
+                
+                const exclusionList = document.getElementById('exclusion-list');
+                if (data.exclusions.length === 0) {
+                    exclusionList.innerHTML = '<li class="empty-exclusions">No exclusions configured</li>';
+                    return;
+                }
+                
+                exclusionList.innerHTML = data.exclusions.map(host => `
+                    <li class="exclusion-item">
+                        <code>${escapeHtml(host)}</code>
+                    </li>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load exclusions:', error);
+            }
+        }
+        
+        // Load certificate status
+        async function loadCertificateStatus() {
+            try {
+                const response = await fetch('/api/proxy/certificate');
+                const data = await response.json();
+                
+                const certStatus = document.getElementById('cert-status');
+                const certDownload = document.getElementById('cert-download');
+                
+                if (data.available) {
+                    certStatus.innerHTML = '<p class="cert-available">✅ Certificate ready for download</p>';
+                    certDownload.style.display = 'block';
+                } else {
+                    certStatus.innerHTML = `<p class="cert-unavailable">⏳ ${data.message}</p>`;
+                    certDownload.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load certificate status:', error);
+            }
+        }
+        
+        // Download certificate button handler
+        document.getElementById('download-cert-btn').addEventListener('click', () => {
+            window.location.href = '/api/proxy/certificate/download';
+        });
+        
+        // Initial load - request history for current tab
+        if (document.getElementById('history').classList.contains('active')) {
+            socket.emit('request_history', { limit: 50 });
+        }
+        
+        // Load exclusions and certificate status on page load
+        loadExclusions();
+        loadCertificateStatus();
+        
+        // Reload certificate status when proxy status changes
+        socket.on('proxy_status', (data) => {
+            // ... existing code ...
+            // Also reload certificate status since starting proxy generates cert
+            setTimeout(loadCertificateStatus, 1000);
+        });
+    </script>
+</body>
+</html>
