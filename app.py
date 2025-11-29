@@ -271,6 +271,97 @@ def create_app():
             return decision, 200
         return {'action': 'pending'}, 200
     
+    # Repeater endpoints
+    @app.route('/api/repeater/send', methods=['POST'])
+    def send_repeater_request():
+        """Send a custom HTTP request from repeater"""
+        import requests
+        
+        data = request.get_json()
+        if not data:
+            return {'error': 'No data provided'}, 400
+        
+        method = data.get('method', 'GET')
+        url = data.get('url')
+        headers = data.get('headers', {})
+        body = data.get('body', '')
+        
+        if not url:
+            return {'error': 'URL is required'}, 400
+        
+        try:
+            # Send the request
+            response = requests.request(
+                method=method,
+                url=url,
+                headers=headers,
+                data=body.encode('utf-8') if body else None,
+                allow_redirects=False,
+                verify=False,  # Allow self-signed certs for testing
+                timeout=30
+            )
+            
+            # Prepare response data
+            response_data = {
+                'status_code': response.status_code,
+                'status_text': response.reason,
+                'headers': dict(response.headers),
+                'body': response.text,
+                'elapsed_ms': int(response.elapsed.total_seconds() * 1000)
+            }
+            
+            # Store in repeater history
+            entry_id = request_store.add_repeater_request(data, response_data)
+            
+            # Emit WebSocket event
+            socketio.emit('repeater_response', {
+                'id': entry_id,
+                'request': data,
+                'response': response_data
+            }, namespace='/')
+            
+            return {
+                'id': entry_id,
+                'response': response_data
+            }, 200
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Repeater request failed: {e}")
+            error_response = {
+                'error': str(e),
+                'error_type': type(e).__name__
+            }
+            
+            # Store failed request in history
+            entry_id = request_store.add_repeater_request(data, error_response)
+            
+            return {
+                'id': entry_id,
+                'error': str(e)
+            }, 500
+    
+    @app.route('/api/repeater/history')
+    def get_repeater_history():
+        """Get repeater request/response history"""
+        limit = request.args.get('limit', type=int, default=50)
+        history = request_store.get_repeater_history(limit=limit)
+        return {'history': history, 'total': len(history)}, 200
+    
+    @app.route('/api/repeater/history/<int:entry_id>')
+    def get_repeater_entry(entry_id):
+        """Get a specific repeater entry"""
+        entry = request_store.get_repeater_entry(entry_id)
+        if entry:
+            return entry, 200
+        return {'error': 'Entry not found'}, 404
+    
+    @app.route('/api/repeater/history/clear', methods=['POST'])
+    def clear_repeater_history():
+        """Clear repeater history"""
+        request_store.clear_repeater_history()
+        socketio.emit('repeater_history_cleared', {}, namespace='/')
+        return {'status': 'cleared'}, 200
+    
     # Certificate management endpoints
     @app.route('/api/proxy/certificate')
     def get_certificate_info():

@@ -2,6 +2,7 @@
 Request storage module
 Stores captured HTTP requests and responses
 Manages intercept queue for request modification
+Manages repeater history for manual requests
 """
 import logging
 from datetime import datetime
@@ -21,6 +22,8 @@ class RequestStore:
         self.intercept_enabled = False
         self.intercept_queue: List[Dict] = []
         self.intercept_decisions: Dict[int, Dict] = {}  # request_id -> decision
+        self.repeater_history: List[Dict] = []
+        self.repeater_id_counter = 0
         
     def add_request(self, request_data: Dict) -> int:
         """
@@ -175,3 +178,56 @@ class RequestStore:
         with self._lock:
             if request_id in self.intercept_decisions:
                 del self.intercept_decisions[request_id]
+    
+    def add_repeater_request(self, request_data: Dict, response_data: Optional[Dict] = None) -> int:
+        """
+        Add a request/response pair to repeater history
+        
+        Args:
+            request_data: Dictionary containing request information
+            response_data: Optional dictionary containing response information
+            
+        Returns:
+            ID of the stored repeater entry
+        """
+        with self._lock:
+            self.repeater_id_counter += 1
+            entry = {
+                'id': self.repeater_id_counter,
+                'timestamp': datetime.utcnow().isoformat(),
+                'request': request_data,
+                'response': response_data,
+            }
+            self.repeater_history.append(entry)
+            logger.debug(f"Added repeater entry {self.repeater_id_counter}")
+            return self.repeater_id_counter
+    
+    def get_repeater_history(self, limit: Optional[int] = None) -> List[Dict]:
+        """
+        Get repeater history
+        
+        Args:
+            limit: Maximum number of entries to return (most recent first)
+            
+        Returns:
+            List of repeater history entries
+        """
+        with self._lock:
+            if limit:
+                return list(reversed(self.repeater_history[-limit:]))
+            return list(reversed(self.repeater_history))
+    
+    def get_repeater_entry(self, entry_id: int) -> Optional[Dict]:
+        """Get a specific repeater entry by ID"""
+        with self._lock:
+            for entry in self.repeater_history:
+                if entry['id'] == entry_id:
+                    return entry
+            return None
+    
+    def clear_repeater_history(self):
+        """Clear all repeater history"""
+        with self._lock:
+            self.repeater_history.clear()
+            self.repeater_id_counter = 0
+            logger.info("Repeater history cleared")

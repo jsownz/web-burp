@@ -257,11 +257,97 @@
                 </div>
             </div>
 
-            <!-- Repeater Tab (placeholder) -->
+            <!-- Repeater Tab -->
             <div id="repeater" class="tab-content">
                 <div class="card">
                     <h2>Request Repeater</h2>
                     <p>Manually craft and send HTTP requests.</p>
+                    
+                    <div class="repeater-container">
+                        <div class="repeater-main">
+                            <!-- Request Editor -->
+                            <div class="repeater-section">
+                                <div class="repeater-header">
+                                    <h3>Request</h3>
+                                    <button id="send-request-btn" class="btn btn-success">Send</button>
+                                </div>
+                                
+                                <div class="repeater-request">
+                                    <div class="request-line">
+                                        <select id="repeater-method" class="method-select">
+                                            <option value="GET">GET</option>
+                                            <option value="POST">POST</option>
+                                            <option value="PUT">PUT</option>
+                                            <option value="DELETE">DELETE</option>
+                                            <option value="PATCH">PATCH</option>
+                                            <option value="HEAD">HEAD</option>
+                                            <option value="OPTIONS">OPTIONS</option>
+                                        </select>
+                                        <input type="text" id="repeater-url" class="url-input" placeholder="https://example.com/api/endpoint">
+                                    </div>
+                                    
+                                    <div class="repeater-tabs">
+                                        <button class="repeater-tab active" data-repeater-tab="headers">Headers</button>
+                                        <button class="repeater-tab" data-repeater-tab="body">Body</button>
+                                    </div>
+                                    
+                                    <div class="repeater-tab-content">
+                                        <div id="repeater-headers" class="repeater-tab-panel active">
+                                            <textarea id="repeater-headers-text" class="repeater-textarea" rows="10" placeholder="Header-Name: value&#10;Content-Type: application/json&#10;Authorization: Bearer token"></textarea>
+                                        </div>
+                                        <div id="repeater-body" class="repeater-tab-panel">
+                                            <textarea id="repeater-body-text" class="repeater-textarea" rows="10" placeholder="Request body content"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Response Viewer -->
+                            <div class="repeater-section">
+                                <div class="repeater-header">
+                                    <h3>Response</h3>
+                                    <div class="response-status" id="response-status"></div>
+                                </div>
+                                
+                                <div class="repeater-response" id="repeater-response">
+                                    <div class="response-empty">
+                                        <p>Send a request to see the response here.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="repeater-response-content" id="repeater-response-content" style="display: none;">
+                                    <div class="repeater-tabs">
+                                        <button class="repeater-tab active" data-response-tab="body">Body</button>
+                                        <button class="repeater-tab" data-response-tab="headers">Headers</button>
+                                        <button class="repeater-tab" data-response-tab="raw">Raw</button>
+                                    </div>
+                                    
+                                    <div class="repeater-tab-content">
+                                        <div id="response-body" class="repeater-tab-panel active">
+                                            <pre id="response-body-text" class="response-pre"></pre>
+                                        </div>
+                                        <div id="response-headers" class="repeater-tab-panel">
+                                            <pre id="response-headers-text" class="response-pre"></pre>
+                                        </div>
+                                        <div id="response-raw" class="repeater-tab-panel">
+                                            <pre id="response-raw-text" class="response-pre"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- History Sidebar -->
+                        <div class="repeater-sidebar">
+                            <div class="sidebar-header">
+                                <h3>History</h3>
+                                <button id="clear-repeater-history-btn" class="btn btn-small">Clear</button>
+                            </div>
+                            <div id="repeater-history-list" class="history-list">
+                                <p class="empty-state-small">No requests sent yet.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -307,6 +393,11 @@
                 // Load intercepted request when switching to intercept tab
                 if (tabName === 'intercept' && interceptEnabled && !currentInterceptedRequest) {
                     loadNextInterceptedRequest();
+                }
+                
+                // Load repeater history when switching to repeater tab
+                if (tabName === 'repeater') {
+                    loadRepeaterHistory();
                 }
             });
         });
@@ -411,8 +502,20 @@
                             <span class="request-host">${escapeHtml(req.host)}</span>
                         </div>
                     </div>
+                    <button class="btn-send-to-repeater" data-request-id="${req.id}" title="Send to Repeater">
+                        ↗
+                    </button>
                 </div>
             `).join('');
+            
+            // Add click handlers for "Send to Repeater" buttons
+            document.querySelectorAll('.btn-send-to-repeater').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const requestId = parseInt(btn.dataset.requestId);
+                    sendToRepeater(requestId);
+                });
+            });
         });
         
         function escapeHtml(text) {
@@ -747,6 +850,300 @@
                 dashboardStatus.classList.toggle('offline', !data.enabled);
             }
         });
+        
+        // ===== REPEATER FUNCTIONALITY =====
+        
+        const sendRequestBtn = document.getElementById('send-request-btn');
+        const clearRepeaterHistoryBtn = document.getElementById('clear-repeater-history-btn');
+        
+        // Repeater tab switching (request tabs)
+        document.querySelectorAll('.repeater-tab[data-repeater-tab]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.repeaterTab;
+                
+                document.querySelectorAll('.repeater-tab[data-repeater-tab]').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('#repeater-headers, #repeater-body').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+                document.getElementById(`repeater-${tabName}`).classList.add('active');
+            });
+        });
+        
+        // Response tab switching
+        document.querySelectorAll('.repeater-tab[data-response-tab]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.responseTab;
+                
+                document.querySelectorAll('.repeater-tab[data-response-tab]').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('#response-body, #response-headers, #response-raw').forEach(panel => {
+                    panel.classList.remove('active');
+                });
+                document.getElementById(`response-${tabName}`).classList.add('active');
+            });
+        });
+        
+        // Send request
+        sendRequestBtn.addEventListener('click', async () => {
+            const method = document.getElementById('repeater-method').value;
+            const url = document.getElementById('repeater-url').value.trim();
+            const headersText = document.getElementById('repeater-headers-text').value;
+            const body = document.getElementById('repeater-body-text').value;
+            
+            if (!url) {
+                alert('Please enter a URL');
+                return;
+            }
+            
+            // Parse headers
+            const headers = {};
+            headersText.split('\n').forEach(line => {
+                const colonIndex = line.indexOf(':');
+                if (colonIndex > 0) {
+                    const key = line.substring(0, colonIndex).trim();
+                    const value = line.substring(colonIndex + 1).trim();
+                    if (key) headers[key] = value;
+                }
+            });
+            
+            // Disable button and show loading
+            sendRequestBtn.disabled = true;
+            sendRequestBtn.textContent = 'Sending...';
+            
+            try {
+                const response = await fetch('/api/repeater/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: method,
+                        url: url,
+                        headers: headers,
+                        body: body
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.response) {
+                    displayResponse(data.response);
+                    loadRepeaterHistory();
+                } else if (data.error) {
+                    displayError(data.error);
+                }
+                
+            } catch (error) {
+                displayError('Failed to send request: ' + error);
+            } finally {
+                sendRequestBtn.disabled = false;
+                sendRequestBtn.textContent = 'Send';
+            }
+        });
+        
+        // Display response
+        function displayResponse(response) {
+            const responseEmpty = document.querySelector('.response-empty');
+            const responseContent = document.getElementById('repeater-response-content');
+            const statusElement = document.getElementById('response-status');
+            
+            // Hide empty, show content
+            if (responseEmpty) responseEmpty.style.display = 'none';
+            responseContent.style.display = 'block';
+            
+            // Display status
+            const statusClass = response.status_code < 300 ? 'status-success' : 
+                               response.status_code < 400 ? 'status-redirect' :
+                               response.status_code < 500 ? 'status-client-error' : 'status-server-error';
+            
+            statusElement.innerHTML = `
+                <span class="${statusClass}">${response.status_code} ${escapeHtml(response.status_text)}</span>
+                <span class="response-time">${response.elapsed_ms}ms</span>
+            `;
+            
+            // Display body
+            const bodyText = response.body || '';
+            document.getElementById('response-body-text').textContent = formatResponseBody(bodyText);
+            
+            // Display headers
+            const headersText = Object.entries(response.headers || {})
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n');
+            document.getElementById('response-headers-text').textContent = headersText;
+            
+            // Display raw
+            const rawText = `HTTP/1.1 ${response.status_code} ${response.status_text}\n${headersText}\n\n${bodyText}`;
+            document.getElementById('response-raw-text').textContent = rawText;
+        }
+        
+        // Display error
+        function displayError(errorMessage) {
+            const responseEmpty = document.querySelector('.response-empty');
+            const responseContent = document.getElementById('repeater-response-content');
+            const statusElement = document.getElementById('response-status');
+            
+            if (responseEmpty) responseEmpty.style.display = 'none';
+            responseContent.style.display = 'block';
+            
+            statusElement.innerHTML = '<span class="status-error">Error</span>';
+            document.getElementById('response-body-text').textContent = errorMessage;
+            document.getElementById('response-headers-text').textContent = '';
+            document.getElementById('response-raw-text').textContent = errorMessage;
+        }
+        
+        // Format response body (try to pretty-print JSON)
+        function formatResponseBody(body) {
+            try {
+                const json = JSON.parse(body);
+                return JSON.stringify(json, null, 2);
+            } catch {
+                return body;
+            }
+        }
+        
+        // Load repeater history
+        async function loadRepeaterHistory() {
+            try {
+                const response = await fetch('/api/repeater/history?limit=20');
+                const data = await response.json();
+                
+                const historyList = document.getElementById('repeater-history-list');
+                
+                if (data.history.length === 0) {
+                    historyList.innerHTML = '<p class="empty-state-small">No requests sent yet.</p>';
+                    return;
+                }
+                
+                historyList.innerHTML = data.history.map(entry => {
+                    const req = entry.request;
+                    const res = entry.response;
+                    const statusClass = res && res.status_code ? 
+                        (res.status_code < 300 ? 'success' : res.status_code < 400 ? 'redirect' : 'error') : 'error';
+                    
+                    return `
+                        <div class="history-item" data-entry-id="${entry.id}">
+                            <div class="history-method ${req.method.toLowerCase()}">${req.method}</div>
+                            <div class="history-details">
+                                <div class="history-url">${escapeHtml(getUrlPath(req.url))}</div>
+                                <div class="history-meta">
+                                    <span class="history-status status-${statusClass}">
+                                        ${res && res.status_code ? res.status_code : 'Error'}
+                                    </span>
+                                    <span class="history-time">${new Date(entry.timestamp).toLocaleTimeString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Add click handlers to history items
+                document.querySelectorAll('.history-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const entryId = parseInt(item.dataset.entryId);
+                        loadRepeaterEntry(entryId);
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Failed to load repeater history:', error);
+            }
+        }
+        
+        // Load specific repeater entry
+        async function loadRepeaterEntry(entryId) {
+            try {
+                const response = await fetch(`/api/repeater/history/${entryId}`);
+                const entry = await response.json();
+                
+                if (entry.request) {
+                    const req = entry.request;
+                    document.getElementById('repeater-method').value = req.method;
+                    document.getElementById('repeater-url').value = req.url;
+                    
+                    const headersText = Object.entries(req.headers || {})
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\n');
+                    document.getElementById('repeater-headers-text').value = headersText;
+                    document.getElementById('repeater-body-text').value = req.body || '';
+                }
+                
+                if (entry.response) {
+                    displayResponse(entry.response);
+                }
+                
+            } catch (error) {
+                console.error('Failed to load repeater entry:', error);
+            }
+        }
+        
+        // Get URL path from full URL
+        function getUrlPath(url) {
+            try {
+                const urlObj = new URL(url);
+                return urlObj.pathname + urlObj.search;
+            } catch {
+                return url;
+            }
+        }
+        
+        // Clear repeater history
+        clearRepeaterHistoryBtn.addEventListener('click', async () => {
+            if (!confirm('Clear all repeater history?')) {
+                return;
+            }
+            
+            try {
+                await fetch('/api/repeater/history/clear', { method: 'POST' });
+                loadRepeaterHistory();
+            } catch (error) {
+                alert('Failed to clear history: ' + error);
+            }
+        });
+        
+        // WebSocket handlers for repeater
+        socket.on('repeater_response', (data) => {
+            console.log('Repeater response received:', data);
+            loadRepeaterHistory();
+        });
+        
+        socket.on('repeater_history_cleared', () => {
+            console.log('Repeater history cleared');
+            loadRepeaterHistory();
+        });
+        
+        // Send request to repeater
+        async function sendToRepeater(requestId) {
+            try {
+                const response = await fetch(`/api/requests/${requestId}`);
+                const req = await response.json();
+                
+                if (req) {
+                    // Populate repeater with request data
+                    document.getElementById('repeater-method').value = req.method || 'GET';
+                    document.getElementById('repeater-url').value = req.url || '';
+                    
+                    // Format headers
+                    const headersText = Object.entries(req.headers || {})
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\n');
+                    document.getElementById('repeater-headers-text').value = headersText;
+                    
+                    // Set body
+                    document.getElementById('repeater-body-text').value = req.content || '';
+                    
+                    // Switch to repeater tab
+                    document.querySelector('[data-tab="repeater"]').click();
+                    
+                    console.log('Request sent to repeater:', req);
+                } else {
+                    alert('Failed to load request');
+                }
+            } catch (error) {
+                console.error('Failed to send request to repeater:', error);
+                alert('Failed to send to repeater: ' + error);
+            }
+        }
     </script>
 </body>
 </html>
