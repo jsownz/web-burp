@@ -176,11 +176,84 @@
                 </div>
             </div>
 
-            <!-- Intercept Tab (placeholder) -->
+            <!-- Intercept Tab -->
             <div id="intercept" class="tab-content">
                 <div class="card">
-                    <h2>Intercept Requests</h2>
-                    <p>Intercept and modify requests in real-time.</p>
+                    <div class="intercept-header">
+                        <div>
+                            <h2>Intercept Requests</h2>
+                            <p>Capture and modify requests before they are sent.</p>
+                        </div>
+                        <div class="intercept-controls">
+                            <button id="intercept-toggle-btn" class="btn btn-success">Enable Intercept</button>
+                            <span class="intercept-status offline" id="intercept-status-indicator">Off</span>
+                        </div>
+                    </div>
+                    
+                    <div id="intercept-content" class="intercept-content">
+                        <div class="intercept-empty" id="intercept-empty">
+                            <p>No intercepted requests. Enable intercept and configure your browser proxy to start capturing.</p>
+                        </div>
+                        
+                        <div class="intercept-editor" id="intercept-editor" style="display: none;">
+                            <div class="editor-header">
+                                <h3>Intercepted Request <span id="current-request-id"></span></h3>
+                                <div class="editor-actions">
+                                    <button id="forward-btn" class="btn btn-success">Forward</button>
+                                    <button id="forward-modified-btn" class="btn btn-warning">Forward (Modified)</button>
+                                    <button id="drop-btn" class="btn btn-danger">Drop</button>
+                                </div>
+                            </div>
+                            
+                            <div class="editor-tabs">
+                                <button class="editor-tab active" data-editor-tab="request">Request</button>
+                                <button class="editor-tab" data-editor-tab="headers">Headers</button>
+                                <button class="editor-tab" data-editor-tab="body">Body</button>
+                            </div>
+                            
+                            <div class="editor-content">
+                                <!-- Request Tab -->
+                                <div id="editor-request" class="editor-tab-content active">
+                                    <div class="form-group">
+                                        <label>Method</label>
+                                        <input type="text" id="edit-method" class="form-input" placeholder="GET">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>URL</label>
+                                        <input type="text" id="edit-url" class="form-input" placeholder="https://example.com/path" readonly>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Path</label>
+                                        <input type="text" id="edit-path" class="form-input" placeholder="/path">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Host</label>
+                                        <input type="text" id="edit-host" class="form-input" readonly>
+                                    </div>
+                                </div>
+                                
+                                <!-- Headers Tab -->
+                                <div id="editor-headers" class="editor-tab-content">
+                                    <div class="headers-editor">
+                                        <textarea id="edit-headers" class="form-textarea" rows="15" placeholder="Header-Name: value"></textarea>
+                                        <small class="form-hint">One header per line in format: Header-Name: value</small>
+                                    </div>
+                                </div>
+                                
+                                <!-- Body Tab -->
+                                <div id="editor-body" class="editor-tab-content">
+                                    <div class="body-editor">
+                                        <textarea id="edit-body" class="form-textarea" rows="15" placeholder="Request body content"></textarea>
+                                        <small class="form-hint">Raw request body content</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="intercept-queue-info">
+                                <span>Requests in queue: <strong id="queue-count">0</strong></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -230,6 +303,11 @@
                 if (tabName === 'history') {
                     socket.emit('request_history', { limit: 50 });
                 }
+                
+                // Load intercepted request when switching to intercept tab
+                if (tabName === 'intercept' && interceptEnabled && !currentInterceptedRequest) {
+                    loadNextInterceptedRequest();
+                }
             });
         });
         
@@ -243,7 +321,7 @@
                 const response = await fetch('/api/proxy/start', { method: 'POST' });
                 const data = await response.json();
                 if (response.ok) {
-                    updateProxyStatus();
+                    
                 } else {
                     alert('Error: ' + data.error);
                 }
@@ -257,7 +335,7 @@
                 const response = await fetch('/api/proxy/stop', { method: 'POST' });
                 const data = await response.json();
                 if (response.ok) {
-                    updateProxyStatus();
+                    
                 } else {
                     alert('Error: ' + data.error);
                 }
@@ -405,6 +483,269 @@
             // ... existing code ...
             // Also reload certificate status since starting proxy generates cert
             setTimeout(loadCertificateStatus, 1000);
+        });
+        
+        // ===== INTERCEPT FUNCTIONALITY =====
+        
+        let interceptEnabled = false;
+        let currentInterceptedRequest = null;
+        
+        const interceptToggleBtn = document.getElementById('intercept-toggle-btn');
+        const interceptStatusIndicator = document.getElementById('intercept-status-indicator');
+        const interceptEmpty = document.getElementById('intercept-empty');
+        const interceptEditor = document.getElementById('intercept-editor');
+        const forwardBtn = document.getElementById('forward-btn');
+        const forwardModifiedBtn = document.getElementById('forward-modified-btn');
+        const dropBtn = document.getElementById('drop-btn');
+        
+        // Editor tab switching
+        document.querySelectorAll('.editor-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.editorTab;
+                
+                document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('.editor-tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.getElementById(`editor-${tabName}`).classList.add('active');
+            });
+        });
+        
+        // Toggle intercept
+        interceptToggleBtn.addEventListener('click', async () => {
+            try {
+                const endpoint = interceptEnabled ? '/api/intercept/disable' : '/api/intercept/enable';
+                const response = await fetch(endpoint, { method: 'POST' });
+                
+                if (response.ok) {
+                    interceptEnabled = !interceptEnabled;
+                    updateInterceptUI();
+                }
+            } catch (error) {
+                alert('Failed to toggle intercept: ' + error);
+            }
+        });
+        
+        function updateInterceptUI() {
+            if (interceptEnabled) {
+                interceptToggleBtn.textContent = 'Disable Intercept';
+                interceptToggleBtn.classList.remove('btn-success');
+                interceptToggleBtn.classList.add('btn-danger');
+                interceptStatusIndicator.textContent = 'On';
+                interceptStatusIndicator.classList.remove('offline');
+                interceptStatusIndicator.classList.add('online');
+            } else {
+                interceptToggleBtn.textContent = 'Enable Intercept';
+                interceptToggleBtn.classList.remove('btn-danger');
+                interceptToggleBtn.classList.add('btn-success');
+                interceptStatusIndicator.textContent = 'Off';
+                interceptStatusIndicator.classList.remove('online');
+                interceptStatusIndicator.classList.add('offline');
+            }
+        }
+        
+        // Display intercepted request in editor
+        function displayInterceptedRequest(req) {
+            currentInterceptedRequest = req;
+            
+            // Show editor, hide empty state
+            interceptEmpty.style.display = 'none';
+            interceptEditor.style.display = 'block';
+            
+            // Populate form fields
+            document.getElementById('current-request-id').textContent = `#${req.id}`;
+            document.getElementById('edit-method').value = req.method || '';
+            document.getElementById('edit-url').value = req.url || '';
+            document.getElementById('edit-path').value = req.path || '';
+            document.getElementById('edit-host').value = req.host || '';
+            
+            // Populate headers
+            const headersText = Object.entries(req.headers || {})
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n');
+            document.getElementById('edit-headers').value = headersText;
+            
+            // Populate body
+            document.getElementById('edit-body').value = req.content || '';
+        }
+        
+        // Forward request without modifications
+        forwardBtn.addEventListener('click', async () => {
+            if (!currentInterceptedRequest) return;
+            
+            try {
+                const response = await fetch(`/api/intercept/forward/${currentInterceptedRequest.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                if (response.ok) {
+                    console.log('Request forwarded');
+                    loadNextInterceptedRequest();
+                }
+            } catch (error) {
+                alert('Failed to forward request: ' + error);
+            }
+        });
+        
+        // Forward request with modifications
+        forwardModifiedBtn.addEventListener('click', async () => {
+            if (!currentInterceptedRequest) return;
+            
+            try {
+                // Parse headers from textarea
+                const headersText = document.getElementById('edit-headers').value;
+                const headers = {};
+                headersText.split('\n').forEach(line => {
+                    const colonIndex = line.indexOf(':');
+                    if (colonIndex > 0) {
+                        const key = line.substring(0, colonIndex).trim();
+                        const value = line.substring(colonIndex + 1).trim();
+                        if (key) headers[key] = value;
+                    }
+                });
+                
+                const modifications = {
+                    method: document.getElementById('edit-method').value,
+                    path: document.getElementById('edit-path').value,
+                    headers: headers,
+                    content: document.getElementById('edit-body').value
+                };
+                
+                const response = await fetch(`/api/intercept/forward/${currentInterceptedRequest.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modifications })
+                });
+                
+                if (response.ok) {
+                    console.log('Request forwarded with modifications');
+                    loadNextInterceptedRequest();
+                }
+            } catch (error) {
+                alert('Failed to forward modified request: ' + error);
+            }
+        });
+        
+        // Drop request
+        dropBtn.addEventListener('click', async () => {
+            if (!currentInterceptedRequest) return;
+            
+            if (!confirm('Drop this request? The connection will be terminated.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/intercept/drop/${currentInterceptedRequest.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    console.log('Request dropped');
+                    loadNextInterceptedRequest();
+                }
+            } catch (error) {
+                alert('Failed to drop request: ' + error);
+            }
+        });
+        
+        // Load next intercepted request
+        async function loadNextInterceptedRequest() {
+            try {
+                const response = await fetch('/api/intercept/next');
+                
+                if (response.ok) {
+                    const req = await response.json();
+                    displayInterceptedRequest(req);
+                } else if (response.status === 404) {
+                    // No more requests in queue (expected behavior)
+                    currentInterceptedRequest = null;
+                    interceptEditor.style.display = 'none';
+                    interceptEmpty.style.display = 'block';
+                } else {
+                    // Unexpected error
+                    console.error('Error loading next request:', response.status, response.statusText);
+                }
+                
+                // Update queue count
+                updateQueueCount();
+            } catch (error) {
+                console.error('Failed to load next intercepted request:', error);
+            }
+        }
+        
+        // Update queue count
+        async function updateQueueCount() {
+            try {
+                const response = await fetch('/api/intercept/queue');
+                const data = await response.json();
+                document.getElementById('queue-count').textContent = data.length || 0;
+            } catch (error) {
+                console.error('Failed to update queue count:', error);
+            }
+        }
+        
+        // WebSocket handlers for intercept
+        socket.on('intercept_status', (data) => {
+            interceptEnabled = data.enabled;
+            updateInterceptUI();
+        });
+        
+        socket.on('intercepted_request', (data) => {
+            console.log('New intercepted request:', data);
+            
+            // If no current request is displayed and we're on intercept tab, show this one
+            const onInterceptTab = document.getElementById('intercept').classList.contains('active');
+            if (!currentInterceptedRequest && interceptEnabled && onInterceptTab) {
+                displayInterceptedRequest(data);
+            }
+            
+            updateQueueCount();
+        });
+        
+        socket.on('request_forwarded', (data) => {
+            console.log('Request forwarded:', data);
+            updateQueueCount();
+        });
+        
+        socket.on('request_dropped', (data) => {
+            console.log('Request dropped:', data);
+            updateQueueCount();
+        });
+        
+        // Load intercept status on page load
+        async function loadInterceptStatus() {
+            try {
+                const response = await fetch('/api/intercept/status');
+                const data = await response.json();
+                interceptEnabled = data.enabled;
+                updateInterceptUI();
+                updateQueueCount();
+                
+                // If intercept is enabled and we're on the intercept tab, try to load a request
+                const onInterceptTab = document.getElementById('intercept').classList.contains('active');
+                if (interceptEnabled && onInterceptTab && !currentInterceptedRequest) {
+                    loadNextInterceptedRequest();
+                }
+            } catch (error) {
+                console.error('Failed to load intercept status:', error);
+            }
+        }
+        
+        loadInterceptStatus();
+        
+        // Update dashboard intercept status
+        socket.on('intercept_status', (data) => {
+            const dashboardStatus = document.querySelector('#dashboard .status-grid .status-card:nth-child(3) .status-indicator');
+            if (dashboardStatus) {
+                dashboardStatus.textContent = data.enabled ? 'On' : 'Off';
+                dashboardStatus.classList.toggle('online', data.enabled);
+                dashboardStatus.classList.toggle('offline', !data.enabled);
+            }
         });
     </script>
 </body>

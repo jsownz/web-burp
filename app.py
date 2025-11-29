@@ -131,8 +131,19 @@ def create_app():
         request_data = request.get_json()
         if request_data:
             req_id = request_store.add_request(request_data)
-            # Emit WebSocket event for new request
-            socketio.emit('new_request', request_data, namespace='/')
+            
+            # Update request_data with the assigned ID
+            request_data['id'] = req_id
+            
+            # If intercepted, add to intercept queue
+            if request_data.get('intercepted'):
+                request_store.add_to_intercept_queue(request_data)
+                socketio.emit('intercepted_request', request_data, namespace='/')
+                logger.info(f"Request {req_id} intercepted and added to queue")
+            else:
+                # Emit WebSocket event for new request
+                socketio.emit('new_request', request_data, namespace='/')
+            
             # Emit updated stats
             stats = request_store.get_stats()
             socketio.emit('stats_update', stats, namespace='/')
@@ -188,6 +199,77 @@ def create_app():
             logger.info(f"Removed {host} from exclusion list")
         
         return {'exclusions': proxy_server.exclude_hosts}, 200
+    
+    # Intercept control endpoints
+    @app.route('/api/intercept/status')
+    def get_intercept_status():
+        """Get intercept status"""
+        return {
+            'enabled': request_store.is_intercept_enabled(),
+            'queue_length': len(request_store.get_intercept_queue())
+        }, 200
+    
+    @app.route('/api/intercept/enable', methods=['POST'])
+    def enable_intercept():
+        """Enable request interception"""
+        request_store.enable_intercept()
+        socketio.emit('intercept_status', {'enabled': True}, namespace='/')
+        return {'status': 'enabled'}, 200
+    
+    @app.route('/api/intercept/disable', methods=['POST'])
+    def disable_intercept():
+        """Disable request interception"""
+        request_store.disable_intercept()
+        socketio.emit('intercept_status', {'enabled': False}, namespace='/')
+        return {'status': 'disabled'}, 200
+    
+    @app.route('/api/intercept/check')
+    def check_intercept():
+        """Check if intercept is enabled (called by mitmproxy addon)"""
+        return {'enabled': request_store.is_intercept_enabled()}, 200
+    
+    @app.route('/api/intercept/queue')
+    def get_intercept_queue():
+        """Get all intercepted requests waiting for decision"""
+        queue = request_store.get_intercept_queue()
+        return {'queue': queue, 'length': len(queue)}, 200
+    
+    @app.route('/api/intercept/next')
+    def get_next_intercepted():
+        """Get the next intercepted request"""
+        next_req = request_store.get_next_intercepted_request()
+        if next_req:
+            return next_req, 200
+        return {'error': 'No intercepted requests'}, 404
+    
+    @app.route('/api/intercept/forward/<int:request_id>', methods=['POST'])
+    def forward_request(request_id):
+        """Forward an intercepted request (optionally with modifications)"""
+        data = request.get_json() or {}
+        modifications = data.get('modifications', {})
+        
+        request_store.set_intercept_decision(request_id, 'forward', modifications)
+        socketio.emit('request_forwarded', {'id': request_id}, namespace='/')
+        
+        return {'status': 'forwarded', 'id': request_id}, 200
+    
+    @app.route('/api/intercept/drop/<int:request_id>', methods=['POST'])
+    def drop_request(request_id):
+        """Drop an intercepted request"""
+        request_store.set_intercept_decision(request_id, 'drop')
+        socketio.emit('request_dropped', {'id': request_id}, namespace='/')
+        
+        return {'status': 'dropped', 'id': request_id}, 200
+    
+    @app.route('/api/intercept/decision/<int:request_id>')
+    def get_decision(request_id):
+        """Get the decision for a request (called by mitmproxy addon)"""
+        decision = request_store.get_intercept_decision(request_id)
+        if decision:
+            # Clear the decision after retrieving it
+            request_store.clear_intercept_decision(request_id)
+            return decision, 200
+        return {'action': 'pending'}, 200
     
     # Certificate management endpoints
     @app.route('/api/proxy/certificate')
