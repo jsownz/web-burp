@@ -1,0 +1,29 @@
+# Standalone Web-Burp service that can be added to any project
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.web-burp.yml up
+
+services:
+  web-burp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web-burp
+    ports:
+      - "5001:5000"  # Flask UI
+      - "8080:8080"  # Proxy port
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    volumes:
+      # Persist certificates and data
+      - web-burp-certs:/app/certs
+      - web-burp-data:/app/data
+    restart: unless-stopped
+    networks:
+      - default  # Use the default network from main compose file
+
+volumes:
+  web-burp-certs:
+  web-burp-data:
