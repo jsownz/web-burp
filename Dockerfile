@@ -53,7 +53,7 @@ ENV PATH=/home/burp/.local/bin:$PATH
 EXPOSE 5000
 
 # Expose proxy port (for future use)
-EXPOSE 8080
+EXPOSE 8081
 
 # Switch to non-root user
 USER burp

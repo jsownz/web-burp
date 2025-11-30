@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ProxyServer:
     """Manages the mitmproxy instance for traffic interception"""
     
-    def __init__(self, port: int = 8080, on_request: Optional[Callable] = None, exclude_hosts: Optional[list] = None, cert_dir: str = "./certs"):
+    def __init__(self, port: int = 8081, on_request: Optional[Callable] = None, exclude_hosts: Optional[list] = None, cert_dir: str = "./certs"):
         """
         Initialize proxy server
         

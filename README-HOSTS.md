@@ -74,7 +74,7 @@ docker exec web-burp cat /etc/hosts
 docker exec web-burp nslookup myapp.local
 
 # Test through the proxy
-curl -x http://localhost:8080 http://myapp.local/
+curl -x http://localhost:8081 http://myapp.local/
 ```
 
 ## Notes

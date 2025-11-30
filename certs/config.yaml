@@ -5,7 +5,7 @@ block_private: false
 
 # Proxy settings
 listen_host: 0.0.0.0
-listen_port: 8080
+listen_port: 8081
 
 # TLS/SSL settings
 # Certificates will be auto-generated in this directory

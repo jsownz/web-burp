@@ -28,7 +28,7 @@
                         <div class="status-card">
                             <h3>Proxy Status</h3>
                             <p class="status-indicator offline" id="proxy-status">Offline</p>
-                            <small>Port 8080</small>
+                            <small>Port 8081</small>
                         </div>
                         <div class="status-card">
                             <h3>Requests Captured</h3>
@@ -46,7 +46,7 @@
                 <div class="card">
                     <h3>Quick Start</h3>
                     <ol class="quick-start-list">
-                        <li>Configure your browser to use <code>localhost:8080</code> as HTTP proxy</li>
+                        <li>Configure your browser to use <code>localhost:8081</code> as HTTP proxy</li>
                         <li>Install the CA certificate for HTTPS interception (coming soon)</li>
                         <li>Navigate to the Proxy tab to start capturing traffic</li>
                         <li>Use Intercept mode to modify requests/responses on-the-fly</li>
@@ -70,7 +70,7 @@
                             <h3>Proxy Settings</h3>
                             <div class="info-row">
                                 <span class="label">Listen Address:</span>
-                                <code>0.0.0.0:8080</code>
+                                <code>0.0.0.0:8081</code>
                             </div>
                             <div class="info-row">
                                 <span class="label">Status:</span>
@@ -124,7 +124,7 @@
                                         </ol>
                                         
                                         <h4>curl (Command Line)</h4>
-                                        <pre><code>curl --cacert ./mitmproxy-ca-cert.pem -x localhost:8080 https://httpbin.org/get</code></pre>
+                                        <pre><code>curl --cacert ./mitmproxy-ca-cert.pem -x localhost:8081 https://httpbin.org/get</code></pre>
                                     </div>
                                 </details>
                             </div>
@@ -140,8 +140,8 @@
                             <ol>
                                 <li>Install the CA certificate above (required for HTTPS)</li>
                                 <li>Open your browser's network settings</li>
-                                <li>Configure HTTP proxy: <code>localhost:8080</code></li>
-                                <li>Configure HTTPS proxy: <code>localhost:8080</code></li>
+                                <li>Configure HTTP proxy: <code>localhost:8081</code></li>
+                                <li>Configure HTTPS proxy: <code>localhost:8081</code></li>
                                 <li>Start browsing - traffic will be captured automatically</li>
                             </ol>
                             

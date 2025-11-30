@@ -63,7 +63,7 @@ def create_app():
         # Add any other domains you want to exclude here
     ]
     
-    proxy_server = ProxyServer(port=8080, on_request=on_request_captured, exclude_hosts=exclude_hosts)
+    proxy_server = ProxyServer(port=8081, on_request=on_request_captured, exclude_hosts=exclude_hosts)
     
     # Register routes
     @app.route('/')
